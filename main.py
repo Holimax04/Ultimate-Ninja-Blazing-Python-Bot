@@ -16,7 +16,7 @@ class API(object):
 	def __init__(self):
 		self.s=requests.session()
 		self.s.verify=False
-		if 'win' in sys.platform:
+		if 'win' in sys.platform and False:
 			self.s.proxies.update({'http': 'http://127.0.0.1:8888','https': 'https://127.0.0.1:8888',})
 		self.debug=True
 		self.c=Crypter()
@@ -89,7 +89,7 @@ class API(object):
 			self.setTeams(_res_json)
 		if 'ssid' in _res:
 			self.setSsid(_res_json['ssid'])
-		return _res
+		return _res_json
 
 	def setTeams(self,id):
 		self.teams=id['u_chara_team_mission']
@@ -104,11 +104,15 @@ class API(object):
 	def setUUID(self,id):
 		self.uuid=id
 
+	def setPlatform(self,id):
+		id=int(id)
+		self.log('[!] using %s as device'%('android' if id ==1 else 'ios'))
+		self.platform=id
+
 	def makeHeaders(self,a1):
 		return OrderedDict([('X-Uuid',self.uuid),('X-Ad-Id',self.ad_id),('X-Player-Id',str(self.player_id)),('X-Platform',str(self.platform)),('X-Language','en'),('X-App-Version',self.app_version),('X-Model','htc Nexus 9'),('X-Platform-Version','Android OS 7.0 / API-24 (NRD90R/3141966)'),('X-Currency','USD'),('X-Platform-User-Id',self.platform_user_id),('X-Request-Id',a1),('X-Sim','0'),('X-Unity-Version','5.3.4p6'),('X-Country','FR'),('X-App-Auth-Key',self.app_auth_key),('Content-Type','text/plain'),('X-Assetbundle-Revision',str(self.assetbundle_revision)),('X-Region',str(self.region)),('X-App-Package-Id',str(self.region)),('X-Timezone','+03 03:00:00'),('X-Main-Revision',str(self.main_revision)),('User-Agent','Dalvik/2.1.0 (Linux; U; Android 7.0; Nexus 9 Build/NRD90R)')])
 
-	def parseRevisions(self,data):
-		res=json.loads(data)
+	def parseRevisions(self,res):
 		self.assetbundle_revision=res['assetbundle_revision']
 		self.main_revision=res['main_revision']
 		
@@ -134,10 +138,9 @@ class API(object):
 
 	def getPlayer(self):
 		_base=self.buildBase()
-		tmp= self.callAPI(_base,'/api/base/player.json')
-		_res_json=json.loads(tmp)
+		_res_json= self.callAPI(_base,'/api/base/player.json')
 		self.log('public_id:%s username:%s'%(_res_json['public_id'],_res_json['player_name']))
-		return tmp
+		return _res_json
 
 	def getMail(self):
 		_base=self.buildBase()
@@ -150,7 +153,7 @@ class API(object):
 	def getTransferCode(self):
 		_base=self.buildBase()
 		tmp= self.callAPI(_base,'/api/transfer/publish.json')
-		self.log('transfer code:%s'%(json.loads(tmp)['transfer_code']))
+		self.log('transfer code:%s'%(tmp['transfer_code']))
 		return tmp
 		
 	def setTutorial(self,id):
@@ -186,8 +189,7 @@ class API(object):
 		
 	def completeMission(self,mission_id,player_id,chara_id,chara_level,skill_level,ability_count,support_luck,fp):
 		supporter=self.getSupporter()
-		res=self.doStartSolo(mission_id,player_id,chara_id,chara_level,skill_level,ability_count,support_luck,fp)
-		res_js=json.loads(res)
+		res_js=self.doStartSolo(mission_id,player_id,chara_id,chara_level,skill_level,ability_count,support_luck,fp)
 		_hash=res_js['hash']
 		return self.doResultSolo(_hash,[1,2,3],100)
 		
@@ -205,12 +207,40 @@ class API(object):
 	def getBoxList(self):
 		_base=self.buildBase()
 		return self.callAPI(_base,'/api/box/list.json')
-		
+
 	def getBoxes(self,ids):
 		_base=self.buildBase()
 		_base['box_no_list']=ids
 		return self.callAPI(_base,'/api/box/get.json')
-		
+
+	def player_firstplay(self):
+		_base=self.buildBase()
+		return self.callAPI(_base,'/api/player/firstplay.json')
+
+	def gasha_tutorial(self,gasha_rare_id=4,gasha_count=1,consume_stone=5):
+		_base=self.buildBase()
+		_base['gasha_rare_id']=gasha_rare_id
+		_base['gasha_count']=gasha_count
+		_base['consume_stone']=consume_stone
+		return self.callAPI(_base,'/api/gasha/tutorial.json')
+
+	def chara_awake(self,base_chara_no):
+		_base=self.buildBase()
+		_base['awake_type']=1
+		_base['base_chara_no']=str(base_chara_no)
+		_base['material_chara_id_list']={"11431":{"chara_id":11431,"num":3,"chara_no":0}}
+		_base['consume_coin']=9000
+		return self.callAPI(_base,'/api/chara/awake.json')
+
+	def chara_growth(self,base_chara_no):
+		_base=self.buildBase()
+		_base['base_chara_no']=str(base_chara_no)
+		_base['material_chara_no_list']=[]
+		_base['material_chara_id_list']={"11533":{"chara_id":11533,"num":2,"chara_no":0}}
+		_base['consume_coin']=200
+		_base['camp_growth_ids']=[16]
+		return self.callAPI(_base,'/api/chara/growth.json')
+
 	def changeTeams(self,team_num,mem,id):
 		for i in self.teams:
 			if self.teams[i]['team_no']==team_num:
@@ -219,7 +249,7 @@ class API(object):
 		self.doTeammission()
 
 	def getGifts(self):
-		boxes=json.loads(self.getBoxList())['u_box']
+		boxes=self.getBoxList()['u_box']
 		tmp=[]
 		for i in boxes:
 			tmp.append(i)
@@ -236,19 +266,25 @@ class API(object):
 		self.getMail()
 		self.getAchievement()
 		self.getTransferCode()
-		_first_reward=json.loads(self.completeMission(100001,0,10496,1,1,0,2,50))
-		print self.setTutorial(1)
+		self.player_firstplay()
+		_first_reward=self.completeMission(100001,0,10496,1,1,0,2,50)
+		self.setTutorial(1)
 		for i in _first_reward['item_save_info']['u_chara']:
 			self.changeTeams(1,5,i)
-		print self.setTutorial(2)
-		#self.completeMission(100002,0,10023,1,1,0,2,50)
-		print self.setTutorial(3)
+		self.setTutorial(2)
+		self.completeMission(100002,0,10023,1,1,0,2,50)
+		self.setTutorial(3)
 		self.getGifts()
-		print self.setTutorial(4)
-		print self.setTutorial(5)
-		print self.setTutorial(6)
-		print self.setTutorial(7)
-		self.getTransferCode()
+		self.setTutorial(4)
+		self.chara_growth(self.teams['1']['member1_chara_no'])
+		self.setTutorial(5)
+		self.chara_awake(self.teams['1']['member1_chara_no'])
+		self.setTutorial(6)
+		self.gasha_tutorial()
+		self.setTutorial(7)
+		self.login()
+		self.getGifts()
+		print self.gasha_tutorial(consume_stone=0)
 		
 	def login(self):
 		self.doStartup()
@@ -259,4 +295,5 @@ class API(object):
 		
 if __name__ == "__main__":
 	a=API()
+	a.setPlatform(2)
 	a.makeNewAccount()
